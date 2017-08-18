@@ -1,0 +1,114 @@
+---
+title: "Twitter Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(twitteR)
+library(wordcloud2)
+library(tidyverse)
+library(stringr)
+library(tm)
+library(qdap)
+key <- "3eMXFqy2BuLASVbOgCF4DZnFj"
+secret <- "Hg7GIC7eWlpTWXzpWNPAQWZgTFksE3VbWAji1SYnWGwEpaENqr"
+token <- "142256976-srCgqBoT0oMm2Oj9qwAmLVmBlNgKz1f1mD4mpdw1"
+accesstoken <- "Ov7wPnQXoak4kD35VJJfnjVrSk9QK3DwKfgVlzsOM0EBd"
+```
+
+## Setup
+
+This is a R markdown document for Twitter Analysis. In this document, we setup twitter credentials, do a connection test, search twitter, gather tweets and perform analysis on them.
+
+Twitter uses Oauth, we will be using "setup_twitter_oauth" function to setup the necessary oauth by passing the key, secret, token information. We can obtain these details by setting up a twitter dev account.
+
+```{r oauth}
+setup_twitter_oauth(key, secret, token, accesstoken)
+```
+
+## Connection Check
+
+Once the oauth is setup successfully, we can perform a connection test by searching the twitter by asking to return minimun number of tweets.
+
+```{r connectchekc}
+searchTwitter("#rstats", n =10)
+```
+
+## Query twitter 
+
+We will be using the searchTwitter function earlier to query twitter for tweets about Tesla.
+```{r queery}
+tweets <- searchTwitter("Tesla", since="2011-07-01", lang = "en", n = 1000)
+```
+
+## Understanding Structure
+
+Let's understand the structure of tweets object
+```{r struct}
+head(tweets)
+class(tweets)
+length(tweets)
+```
+
+Converting tweets to Data Frame and creating text as a character vector and removing graphic content
+```{r DF}
+#tweetsDF <- twListToDF(tweets)
+tweets_vector <- sapply(tweets, function(x) x$getText())
+tweets_vector <- str_replace_all(tweets_vector,"[^[:graph:]]", " ")
+```
+
+## Pre-processing Tweets
+
+Step1 : In this step we will be converting the tweets into a source object 
+```{r source}
+tweets_source <- VectorSource(tweets_vector)
+```
+
+Step2 : Create a corpus object from the source object
+```{r corpus}
+tweets_corpus <- VCorpus(tweets_source)
+```
+
+## Cleaning Tweets
+
+Step1: Build a function that would do the basic pre-processing steps
+```{r func}
+preprocess <- function(x) {
+  x <- tm_map(x, stripWhitespace)
+  x <- tm_map(x, removePunctuation)
+  x <- tm_map(x, content_transformer(tolower))
+  x <- tm_map(x, removeWords, c(stopwords("en"), "tesla", "will"))
+  x <- tm_map(x, content_transformer(removeNumbers))
+  x
+}
+```
+
+Now lets us use this pre processing function to convert all characters to lower case, remove punctuations, remove numbers and strip white spaces
+```{r}
+tweets_corpus <- preprocess(tweets_corpus)
+```
+
+
+Create a Term Document Matrix where each word is a row of the matrix and every column is the document
+```{r TDM}
+tweets_tdm <- TermDocumentMatrix(tweets_corpus)
+```
+
+Convert the TDM into a matrix and compute the word frequencies across each document using row sums
+```{r matrix}
+tweets_tdm_m <- as.matrix(tweets_tdm)
+freq <- rowSums(tweets_tdm_m)
+```
+
+Create a new data frame with words and their corresponding frequencies
+```{r freq}
+freq_df <- tibble(words = names(freq), value = freq)
+freq_df <- freq_df %>% arrange(desc(value))
+head(freq_df)
+```
+
+Create a word cloud using wordcloud2 library
+```{r}
+wordcloud2(data = freq_df[1:100, ])
+```
+
